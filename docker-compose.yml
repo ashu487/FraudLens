@@ -1,0 +1,23 @@
+services:
+  pubsub:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 --project=${GCP_PROJECT:-fraud-local}
+    ports:
+      - "8085:8085"
+
+  scoring:
+    build: ./services/scoring
+    env_file: .env
+    depends_on:
+      - pubsub
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+
+  simulator:
+    build: ./services/simulator
+    env_file: .env
+    depends_on:
+      - pubsub
+      - scoring
