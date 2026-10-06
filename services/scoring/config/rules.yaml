@@ -1,0 +1,35 @@
+# Rules config. Each rule that fires adds its weight; the total is capped at 1.0.
+#   score >= thresholds.block  -> block
+#   score >= thresholds.review -> review
+#   otherwise                  -> approve
+# Set `enabled: false` to switch a rule off. Restart the scoring service after editing.
+thresholds:
+  review: 0.5
+  block: 0.8
+
+rules:
+  account_drained:
+    weight: 0.85
+    params:
+      tolerance: 0.01      # amount must equal the origin balance within this much
+
+  large_risky_amount:
+    weight: 0.30
+    params:
+      min_amount: 200000
+
+  zero_amount:
+    weight: 0.60
+
+  velocity_burst:          # many transactions from one account in a short window
+    weight: 0.60
+    params:
+      window_seconds: 60
+      max_txns: 5
+
+  velocity_amount:         # lots of money moved by one account in an hour
+    weight: 0.50
+    params:
+      window_seconds: 3600
+      min_txns: 2
+      max_total: 1000000

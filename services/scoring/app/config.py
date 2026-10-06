@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     queue_backend: str = "pubsub"
     storage_backend: str = "duckdb"
     duckdb_path: str = "/data/fraud.duckdb"
+    rules_config: str = "config/rules.yaml"
 
 
 settings = Settings()

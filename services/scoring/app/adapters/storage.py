@@ -7,6 +7,9 @@ from app.models import Transaction, ScoreResult
 
 class Storage(ABC):
     @abstractmethod
+    def seen(self, txn_id: str) -> bool: ...
+
+    @abstractmethod
     def save_if_new(self, txn: Transaction, result: ScoreResult) -> bool:
         """Atomically store the result. Returns False if txn_id was already stored (idempotency)."""
 
@@ -35,6 +38,11 @@ class DuckDBStorage(Storage):
             )"""
         )
 
+    def seen(self, txn_id: str) -> bool:
+        with self.lock:
+            return self.con.execute(
+                "SELECT 1 FROM scored_transactions WHERE txn_id = ?", [txn_id]).fetchone() is not None
+
     def save_if_new(self, txn: Transaction, result: ScoreResult) -> bool:
         with self.lock:
             if self.con.execute(
@@ -53,8 +61,7 @@ class DuckDBStorage(Storage):
     def stats(self) -> dict:
         with self.lock:
             by_decision = dict(self.con.execute(
-                "SELECT decision, count(*) FROM scored_transactions GROUP BY decision"
-            ).fetchall())
+                "SELECT decision, count(*) FROM scored_transactions GROUP BY decision").fetchall())
             tp, fp, fn, tn = self.con.execute(
                 """SELECT
                     coalesce(sum(CASE WHEN decision <> 'approve' AND is_fraud THEN 1 ELSE 0 END), 0),
@@ -69,12 +76,13 @@ class DuckDBStorage(Storage):
             "confusion": {"tp": tp, "fp": fp, "fn": fn, "tn": tn},
             "precision": round(tp / (tp + fp), 4) if tp + fp else None,
             "recall": round(tp / (tp + fn), 4) if tp + fn else None,
+            "false_positive_rate": round(fp / (fp + tn), 4) if fp + tn else None,
         }
 
     def recent(self, n: int = 20) -> list[dict]:
         with self.lock:
             cur = self.con.execute(
-                "SELECT txn_id, type, amount, risk_score, decision, reasons, is_fraud "
+                "SELECT txn_id, type, amount, account_id, risk_score, decision, reasons, is_fraud "
                 "FROM scored_transactions ORDER BY scored_at DESC LIMIT ?", [n])
             cols = [c[0] for c in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]

@@ -1,6 +1,6 @@
-"""Replays PaySim rows into Pub/Sub, with fraud boosting, duplicates and malformed events.
-Falls back to synthetic rows if the PaySim CSV isn't mounted."""
-import csv, json, os, random, time, uuid
+"""Replays PaySim rows into Pub/Sub, with fraud boosting, duplicates, malformed events
+and injected velocity bursts. Falls back to synthetic rows if the PaySim CSV isn't mounted."""
+import csv, itertools, json, os, random, time, uuid
 from datetime import datetime, timezone
 from google.api_core.exceptions import AlreadyExists
 from google.cloud import pubsub_v1
@@ -12,6 +12,8 @@ fraud_ratio = float(os.getenv("SIM_FRAUD_RATIO", "0.05"))
 legit_sample = float(os.getenv("SIM_LEGIT_SAMPLE", "0.01"))
 dup_rate = float(os.getenv("SIM_DUPLICATE_RATE", "0.02"))
 bad_rate = float(os.getenv("SIM_BAD_RATE", "0.01"))
+burst_rate = float(os.getenv("SIM_BURST_RATE", "0.005"))   # chance per tick of starting a burst
+burst_size = int(os.getenv("SIM_BURST_SIZE", "8"))
 csv_path = os.getenv("PAYSIM_CSV", "/data/PS_20174392719_1491204439457_log.csv")
 
 
@@ -66,10 +68,30 @@ def corrupt(event: dict) -> dict:
     return bad
 
 
+def burst_row(account: str, balance: float) -> tuple[dict, float]:
+    """One small transfer from `account`. Not drained and not large, so ONLY the
+    velocity rules can catch it. Labeled as fraud (rapid-fire mule/card-testing pattern)."""
+    amount = round(random.uniform(500, 5000), 2)
+    row = {"type": "TRANSFER", "amount": amount, "nameOrig": account,
+           "nameDest": f"C{random.randint(9_000_000_000, 9_999_999_999)}",
+           "oldbalanceOrg": balance, "newbalanceOrig": round(balance - amount, 2),
+           "oldbalanceDest": 0.0, "newbalanceDest": 0.0, "step": 1, "isFraud": "1"}
+    return row, round(balance - amount, 2)
+
+
+def cycle_shuffled(pool: list):
+    """Sample without replacement (then reshuffle), so the same account doesn't
+    reappear within minutes purely because of sampling."""
+    random.shuffle(pool)
+    return itertools.cycle(pool)
+
+
 use_csv = os.path.exists(csv_path)
 fraud_pool, legit_pool = load_pools() if use_csv else ([], [])
 if not use_csv:
     print(f"{csv_path} not found, using synthetic data", flush=True)
+fraud_iter = cycle_shuffled(fraud_pool) if use_csv else None
+legit_iter = cycle_shuffled(legit_pool) if use_csv else None
 
 publisher = pubsub_v1.PublisherClient()
 topic_path = publisher.topic_path(project, topic_name)
@@ -82,12 +104,13 @@ for _ in range(60):  # wait for emulator
     except Exception:
         time.sleep(1)
 
-print(f"Publishing to {topic_path} at {rate}/sec (fraud {fraud_ratio:.0%}, dup {dup_rate:.0%}, bad {bad_rate:.0%})", flush=True)
+print(f"Publishing to {topic_path} at {rate}/sec (fraud {fraud_ratio:.0%}, dup {dup_rate:.0%}, "
+      f"bad {bad_rate:.0%}, bursts {burst_rate:.1%} x {burst_size})", flush=True)
 sent = 0
 while True:
     want_fraud = random.random() < fraud_ratio
     if use_csv:
-        row = random.choice(fraud_pool if want_fraud else legit_pool)
+        row = next(fraud_iter if want_fraud else legit_iter)
     else:
         row = synthetic_row(want_fraud)
     event = to_event(row)
@@ -98,6 +121,17 @@ while True:
     if random.random() < dup_rate:      # at-least-once delivery: same event again
         publisher.publish(topic_path, data)
     sent += 1
+
+    if random.random() < burst_rate:    # velocity attack: one account, many quick transfers
+        account = f"C{random.randint(9_000_000_000, 9_999_999_999)}"
+        balance = round(random.uniform(200_000, 900_000), 2)
+        for _ in range(burst_size):
+            row, balance = burst_row(account, balance)
+            publisher.publish(topic_path, json.dumps(to_event(row)).encode())
+            sent += 1
+            time.sleep(0.1)
+        print(f"injected burst of {burst_size} from {account}", flush=True)
+
     if sent % 100 == 0:
         print(f"sent {sent} events", flush=True)
     time.sleep(1 / rate)

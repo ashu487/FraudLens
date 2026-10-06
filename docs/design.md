@@ -15,3 +15,4 @@ Simulator -> Pub/Sub -> Scoring service (rules + model) -> Storage (BigQuery / D
 
 ## Decisions & tradeoffs
 (Add as you go. Interviewers love this section.)
+Rules v2 on full PaySim: precision 100%, recall 97.8%, false positive rate 0%; 179 fraud cases missed (154 TRANSFER, 25 CASH_OUT, 25 with origin balance 0)
