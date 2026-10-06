@@ -1,0 +1,7 @@
+# only needed on your machine for scripts/train_model.py (not in the Docker image)
+pandas
+scikit-learn
+xgboost
+matplotlib
+pyyaml
+pydantic

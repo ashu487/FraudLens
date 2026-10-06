@@ -37,6 +37,8 @@ class DuckDBStorage(Storage):
                 scored_at TIMESTAMP DEFAULT current_timestamp
             )"""
         )
+        # migrate DB files created before the ML model existed
+        self.con.execute("ALTER TABLE scored_transactions ADD COLUMN IF NOT EXISTS model_score DOUBLE")
 
     def seen(self, txn_id: str) -> bool:
         with self.lock:
@@ -51,10 +53,10 @@ class DuckDBStorage(Storage):
                 return False
             self.con.execute(
                 """INSERT INTO scored_transactions
-                   (txn_id, type, amount, account_id, risk_score, decision, reasons, is_fraud)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (txn_id, type, amount, account_id, risk_score, decision, reasons, is_fraud, model_score)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [txn.txn_id, txn.type, txn.amount, txn.account_id, result.risk_score,
-                 result.decision, ";".join(result.reasons), txn.is_fraud],
+                 result.decision, ";".join(result.reasons), txn.is_fraud, result.model_score],
             )
             return True
 
@@ -82,7 +84,7 @@ class DuckDBStorage(Storage):
     def recent(self, n: int = 20) -> list[dict]:
         with self.lock:
             cur = self.con.execute(
-                "SELECT txn_id, type, amount, account_id, risk_score, decision, reasons, is_fraud "
+                "SELECT txn_id, type, amount, account_id, risk_score, model_score, decision, reasons, is_fraud "
                 "FROM scored_transactions ORDER BY scored_at DESC LIMIT ?", [n])
             cols = [c[0] for c in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]

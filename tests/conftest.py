@@ -24,4 +24,5 @@ def make_txn(txn_id="t1", type="TRANSFER", amount=500.0, old_org=10_000.0, accou
 
 @pytest.fixture
 def scorer():
+    # rules only: results must not depend on whatever models happen to be in ./models
     return Scorer(RuleEngine.from_file(RULES_PATH))

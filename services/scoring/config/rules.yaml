@@ -1,4 +1,4 @@
-# Rules config. Each rule that fires adds its weight; the total is capped at 1.0.
+# Each rule that fires adds its weight; the total is capped at 1.0.
 #   score >= thresholds.block  -> block
 #   score >= thresholds.review -> review
 #   otherwise                  -> approve
@@ -33,3 +33,16 @@ rules:
       window_seconds: 3600
       min_txns: 2
       max_total: 1000000
+
+# ML model (trained by scripts/train_model.py). Its output is added to the rule score:
+#   probability >= block_threshold  -> adds block_weight  (alone: block)
+#   probability >= review_threshold -> adds review_weight (alone: review)
+# Thresholds come from the model's meta.json unless you set them here.
+# If the folder doesn't exist yet the service logs a warning and runs rules-only.
+model:
+  enabled: true
+  dir: models/full         # one of: models/base, models/no_origin, models/full
+  review_weight: 0.5
+  block_weight: 0.85
+  # review_threshold: 0.9
+  # block_threshold: 0.99

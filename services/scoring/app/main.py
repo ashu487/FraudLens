@@ -15,7 +15,8 @@ log = logging.getLogger("main")
 async def lifespan(app: FastAPI):
     storage = get_storage(settings.storage_backend, path=settings.duckdb_path)
     scorer = Scorer.from_file(settings.rules_config)
-    log.info("loaded rules: %s", [r.name for r in scorer.engine.rules])
+    log.info("loaded rules: %s; model: %s", [r.name for r in scorer.engine.rules],
+             scorer.model.meta.get("feature_set") if scorer.model else "none (rules-only)")
     processor = Processor(storage, scorer)
     app.state.storage, app.state.processor, app.state.scorer = storage, processor, scorer
     consumer = None
@@ -34,12 +35,14 @@ app = FastAPI(title="Fraud Scoring Service", lifespan=lifespan)
 
 @app.get("/health")
 def health(request: Request):
-    return {"status": "ok", "env": settings.app_env, "counters": dict(request.app.state.processor.counters)}
+    return {"status": "ok", "env": settings.app_env,
+            "model_loaded": request.app.state.scorer.model is not None,
+            "counters": dict(request.app.state.processor.counters)}
 
 
 @app.get("/rules")
 def rules(request: Request):
-    return request.app.state.scorer.engine.describe()
+    return request.app.state.scorer.describe()
 
 
 @app.post("/score")

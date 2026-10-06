@@ -14,7 +14,7 @@ def event(txn_id="t1", **over):
 
 
 def proc():
-    return Processor(DuckDBStorage(":memory:"), Scorer.from_file(RULES_PATH))
+    return Processor(DuckDBStorage(":memory:"), Scorer.from_file(RULES_PATH, load_model=False))
 
 
 def test_valid_message_scored():

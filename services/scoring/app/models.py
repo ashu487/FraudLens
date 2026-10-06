@@ -26,3 +26,4 @@ class ScoreResult(BaseModel):
     risk_score: float          # 0..1
     decision: str              # approve | review | block
     reasons: list[str] = []
+    model_score: float | None = None   # ML fraud probability; None if no model / out of scope
