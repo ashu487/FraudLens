@@ -20,8 +20,8 @@ curl localhost:8080/health
 
 ## Roadmap
 - [x] Week 1: scaffold, design doc
-- [ ] Week 2: simulator + ingestion
-- [ ] Week 3: rules engine
+- [x] Week 2: simulator + ingestion
+- [x] Week 3: rules engine
 - [ ] Week 4: ML model
 - [ ] Week 5: scoring pipeline + SHAP
 - [ ] Week 6: dashboard + feedback loop
