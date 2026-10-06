@@ -21,3 +21,5 @@ services:
     depends_on:
       - pubsub
       - scoring
+    volumes:
+      - ./data:/data:ro
